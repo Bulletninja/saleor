@@ -100,6 +100,7 @@ def product_select_type(request):
 @staff_member_required
 @permission_required('product.edit_product')
 def product_create(request, type_pk):
+    site_settings = request.site.settings
     product_type = get_object_or_404(ProductType, pk=type_pk)
     create_variant = not product_type.has_variants
     product = Product()
@@ -108,7 +109,9 @@ def product_create(request, type_pk):
     if create_variant:
         variant = ProductVariant(product=product)
         variant_form = forms.ProductVariantForm(
-            request.POST or None, instance=variant, prefix='variant')
+            request.POST or None,
+            initial_track_inventory=site_settings.track_inventory_by_default,
+            instance=variant, prefix='variant')
         variant_errors = not variant_form.is_valid()
     else:
         variant_form = None
@@ -312,9 +315,13 @@ def variant_details(request, product_pk, variant_pk):
 @staff_member_required
 @permission_required('product.edit_product')
 def variant_create(request, product_pk):
+    site_settings = request.site.settings
     product = get_object_or_404(Product.objects.all(), pk=product_pk)
     variant = ProductVariant(product=product)
-    form = forms.ProductVariantForm(request.POST or None, instance=variant)
+    form = forms.ProductVariantForm(
+        request.POST or None,
+        initial_track_inventory=site_settings.track_inventory_by_default,
+        instance=variant)
     if form.is_valid():
         form.save()
         msg = pgettext_lazy(
@@ -490,7 +497,6 @@ def product_image_delete(request, product_pk, img_pk):
 
 @require_POST
 @staff_member_required
-@permission_required('product.edit_product')
 def ajax_reorder_product_images(request, product_pk):
     product = get_object_or_404(Product, pk=product_pk)
     form = forms.ReorderProductImagesForm(request.POST, instance=product)
@@ -514,7 +520,7 @@ def ajax_upload_image(request, product_pk):
     status = 200
     if form.is_valid():
         image = form.save()
-        ctx = {'id': image.pk, 'image': None, 'order': image.order}
+        ctx = {'id': image.pk, 'image': None, 'order': image.sort_order}
     elif form.errors:
         status = 400
         ctx = {'error': form.errors}
@@ -654,3 +660,19 @@ def attribute_choice_value_delete(request, attribute_pk, value_pk):
         request,
         'dashboard/product/product_attribute/values/modal/confirm_delete.html',
         {'value': value, 'attribute_pk': attribute_pk})
+
+
+@staff_member_required
+@permission_required('product.edit_properties')
+def ajax_reorder_attribute_choice_values(request, attribute_pk):
+    attribute = get_object_or_404(ProductAttribute, pk=attribute_pk)
+    form = forms.ReorderAttributeChoiceValuesForm(
+        request.POST, instance=attribute)
+    status = 200
+    ctx = {}
+    if form.is_valid():
+        form.save()
+    elif form.errors:
+        status = 400
+        ctx = {'error': form.errors}
+    return JsonResponse(ctx, status=status)

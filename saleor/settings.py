@@ -8,12 +8,25 @@ from django.contrib.messages import constants as messages
 from django.utils.translation import gettext_lazy as _
 from django_prices.templatetags.prices_i18n import get_currency_fraction
 
+from . import __version__
+
 
 def get_list(text):
     return [item.strip() for item in text.split(',')]
 
 
-DEBUG = ast.literal_eval(os.environ.get('DEBUG', 'True'))
+def get_bool_from_env(name, default_value):
+    if name in os.environ:
+        value = os.environ[name]
+        try:
+            return ast.literal_eval(value)
+        except ValueError as e:
+            raise ValueError(
+                '{} is an invalid value for {}'.format(value, name)) from e
+    return default_value
+
+
+DEBUG = get_bool_from_env('DEBUG', True)
 
 SITE_ID = 1
 
@@ -46,6 +59,7 @@ TIME_ZONE = 'America/Chicago'
 LANGUAGE_CODE = 'en'
 LANGUAGES = [
     ('bg', _('Bulgarian')),
+    ('cs', _('Czech')),
     ('de', _('German')),
     ('en', _('English')),
     ('es', _('Spanish')),
@@ -90,8 +104,7 @@ EMAIL_BACKEND = email_config['EMAIL_BACKEND']
 EMAIL_USE_TLS = email_config['EMAIL_USE_TLS']
 EMAIL_USE_SSL = email_config['EMAIL_USE_SSL']
 
-ENABLE_SSL = ast.literal_eval(
-    os.environ.get('ENABLE_SSL', 'False'))
+ENABLE_SSL = get_bool_from_env('ENABLE_SSL', False)
 
 if ENABLE_SSL:
     SECURE_SSL_REDIRECT = not DEBUG
@@ -123,7 +136,7 @@ context_processors = [
     'django.contrib.messages.context_processors.messages',
     'django.template.context_processors.request',
     'saleor.core.context_processors.default_currency',
-    'saleor.cart.context_processors.cart_counter',
+    'saleor.checkout.context_processors.cart_counter',
     'saleor.core.context_processors.navigation',
     'saleor.core.context_processors.search_enabled',
     'saleor.site.context_processors.site',
@@ -187,7 +200,6 @@ INSTALLED_APPS = [
     'saleor.account',
     'saleor.discount',
     'saleor.product',
-    'saleor.cart',
     'saleor.checkout',
     'saleor.core',
     'saleor.graphql',
@@ -217,14 +229,16 @@ INSTALLED_APPS = [
     'django_filters',
     'django_celery_results',
     'impersonate',
-    'phonenumber_field']
+    'phonenumber_field',
+    'captcha',
+    'raven.contrib.django.raven_compat']
 
 if DEBUG:
     MIDDLEWARE.append(
         'debug_toolbar.middleware.DebugToolbarMiddleware')
     INSTALLED_APPS.append('debug_toolbar')
 
-ENABLE_SILK = ast.literal_eval(os.environ.get('ENABLE_SILK', 'False'))
+ENABLE_SILK = get_bool_from_env('ENABLE_SILK', False)
 if ENABLE_SILK:
     MIDDLEWARE.insert(0, 'silk.middleware.SilkyMiddleware')
     INSTALLED_APPS.append('silk')
@@ -338,8 +352,7 @@ AWS_SECRET_ACCESS_KEY = os.environ.get('AWS_SECRET_ACCESS_KEY')
 AWS_STORAGE_BUCKET_NAME = os.environ.get('AWS_STORAGE_BUCKET_NAME')
 AWS_MEDIA_BUCKET_NAME = os.environ.get('AWS_MEDIA_BUCKET_NAME')
 AWS_MEDIA_CUSTOM_DOMAIN = os.environ.get('AWS_MEDIA_CUSTOM_DOMAIN')
-AWS_QUERYSTRING_AUTH = ast.literal_eval(
-    os.environ.get('AWS_QUERYSTRING_AUTH', 'False'))
+AWS_QUERYSTRING_AUTH = get_bool_from_env('AWS_QUERYSTRING_AUTH', False)
 
 if AWS_STORAGE_BUCKET_NAME:
     STATICFILES_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'
@@ -361,8 +374,8 @@ VERSATILEIMAGEFIELD_RENDITION_KEY_SETS = {
 
 VERSATILEIMAGEFIELD_SETTINGS = {
     # Images should be pre-generated on Production environment
-    'create_images_on_demand': ast.literal_eval(
-        os.environ.get('CREATE_IMAGES_ON_DEMAND', repr(DEBUG))),
+    'create_images_on_demand': get_bool_from_env(
+        'CREATE_IMAGES_ON_DEMAND', DEBUG),
 }
 
 PLACEHOLDER_IMAGES = {
@@ -430,6 +443,8 @@ SOCIAL_AUTH_USER_MODEL = AUTH_USER_MODEL
 SOCIAL_AUTH_FACEBOOK_SCOPE = ['email']
 SOCIAL_AUTH_FACEBOOK_PROFILE_EXTRA_PARAMS = {
     'fields': 'id, email'}
+# As per March 2018, Facebook requires all traffic to go through HTTPS only
+SOCIAL_AUTH_REDIRECT_IS_HTTPS = True
 
 # CELERY SETTINGS
 CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL') or ''
@@ -474,3 +489,20 @@ ALLOWED_STYLES = ['text-align']
 DEFAULT_MENUS = {
     'top_menu_name': 'navbar',
     'bottom_menu_name': 'footer'}
+
+# This enable the new 'No Captcha reCaptcha' version (the simple checkbox)
+# instead of the old (deprecated) one. For more information see:
+#   https://github.com/praekelt/django-recaptcha/blob/34af16ba1e/README.rst
+NOCAPTCHA = True
+
+# Set Google's reCaptcha keys
+RECAPTCHA_PUBLIC_KEY = os.environ.get('RECAPTCHA_PUBLIC_KEY')
+RECAPTCHA_PRIVATE_KEY = os.environ.get('RECAPTCHA_PRIVATE_KEY')
+
+
+#  Sentry
+SENTRY_DSN = os.environ.get('SENTRY_DSN')
+if SENTRY_DSN:
+    RAVEN_CONFIG = {
+        'dsn': SENTRY_DSN,
+        'release': __version__}
